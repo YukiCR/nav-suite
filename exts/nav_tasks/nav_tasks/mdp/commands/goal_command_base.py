@@ -88,14 +88,21 @@ class GoalCommandBaseTerm(CommandTerm):
         if env_ids is None:
             env_ids = slice(None)
 
+        # Check if the robot data is still valid (may be None during shutdown/reset)
+        try:
+            robot_pos = self.robot.data.body_pos_w[:, 0, :3]
+        except ReferenceError:
+            # Robot data no longer available (e.g., during environment shutdown)
+            return
+
         # update goal marker if it exists
         self.box_goal_visualizer.visualize(self.pos_command_w[env_ids])
 
         if self.cfg.vis_line:
             # update the line marker
             # calculate the difference vector between the robot root position and the goal position
-            difference = self.pos_command_w - self.robot.data.body_pos_w[:, 0, :3]
-            translations = self.robot.data.body_pos_w[:, 0, :3]
+            difference = self.pos_command_w - robot_pos
+            translations = robot_pos.clone()
             # calculate the scale of the arrow (Mx3)
             difference_norm = torch.norm(difference, dim=1)
             # translate half of the length along difference axis

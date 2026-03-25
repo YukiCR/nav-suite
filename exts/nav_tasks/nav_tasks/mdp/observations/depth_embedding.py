@@ -204,7 +204,7 @@ class DepthEmbedder:
         self.device = device
         self.encoder_net = mdp.PerceptNet(layers=[2, 2, 2, 2]).to(self.device)
         resnet = os.path.join(NAVSUITE_TASKS_DATA_DIR, "Policies", "perceptnet_emb256_low_resolution_SD.pt")
-        self.encoder_net.load_state_dict(torch.load(resnet))
+        self.encoder_net.load_state_dict(torch.load(resnet, weights_only=False))
         self.encoder_net.eval()
 
     @staticmethod
