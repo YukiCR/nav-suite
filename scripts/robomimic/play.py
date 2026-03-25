@@ -72,7 +72,7 @@ if args_cli.enable_pinocchio:
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
     import isaaclab_tasks.manager_based.locomanipulation.pick_place  # noqa: F401
 
-import go1_mimic.tasks  
+import nav_tasks.configs  # noqa: F401
 
 from isaaclab_tasks.utils import parse_env_cfg
 
@@ -111,19 +111,6 @@ def rollout(policy, env, success_term, horizon, device):
                     image = image / 255.0
                     image = image.clip(0.0, 1.0)
                     obs[image_name] = image
-
-        # print the dim and shape of depth image
-        # NOTE: the depth image' shape is somehow (64, 64) instead of (1, 64, 64) as expected by the policy.
-        #       Without this line, the forward cannot work
-        # TODO: figure out if is this fix a valid fix
-        obs['depth_image'] = obs['depth_image'].unsqueeze(0)
-
-        # print dim and shape of lader distance
-        # print(f"Before unsqueeze, lader_distance shape: {obs['lader_distance'].shape}")
-        obs['lader_distance'] = obs['lader_distance'].unsqueeze(0)
-
-        obs['heading_abs'] = obs['heading_abs'].unsqueeze(0)
-        obs['heading_error'] = obs['heading_error'].unsqueeze(0)
 
         traj["obs"].append(obs)
 

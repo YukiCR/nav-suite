@@ -17,6 +17,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.managers import DatasetExportMode
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, RayCasterCameraCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg, TerrainGeneratorCfg, MeshRepeatedBoxesTerrainCfg, FlatPatchSamplingCfg
@@ -29,10 +30,13 @@ from nav_suite.collectors import TrajectorySamplingCfg
 from nav_suite.terrain_analysis import TerrainAnalysisCfg
 
 import nav_tasks.mdp as mdp
+from nav_tasks.mdp.recorders import NavigationILRecorderManagerCfg
 from nav_tasks.sensors import ZED_X_MINI_WIDE_RAYCASTER_CFG, adjust_ray_caster_camera_image_size
 
 from nav_tasks.configs.env_cfg_base import *
 from isaaclab_assets.robots.unitree import UNITREE_GO1_CFG # base config of go1 robot
+
+from datetime import datetime
 
 DIS_OBS_TERRAINS_CFG = TerrainGeneratorCfg(
     size=(15.0, 15.0),
@@ -62,16 +66,39 @@ DIS_OBS_TERRAINS_CFG = TerrainGeneratorCfg(
                             platform_width=2.0,
                             platform_height=0.0,
                             rel_height_noise=(1.0, 1.0),
-                            # flat_patch_sampling={
-                            #     "target": FlatPatchSamplingCfg(
-                            #                 num_patches=40,
-                            #                 patch_radius=[0.25, 0.5, 0.75],
-                            #                 max_height_diff=0.01,
-                            #                 x_range=(-10, 10), 
-                            #                 y_range=(-10, 10),
-                            #                 z_range=(-0.01, 0.01)
-                            #             )
-                            #     }
+                ),
+
+        }
+)
+
+DIS_OBS_STATIC_TERRAINS_CFG = TerrainGeneratorCfg(
+    size=(30.0, 30.0),
+    border_width=0.0,
+    num_rows=1,
+    num_cols=1,
+    horizontal_scale=0.1,
+    vertical_scale=0.1,
+    slope_threshold=0.75,
+    curriculum=False,
+    use_cache=False,
+    sub_terrains={
+        "repeated_boxes": MeshRepeatedBoxesTerrainCfg(
+                            proportion= 1.0,
+                            object_params_start= MeshRepeatedBoxesTerrainCfg.ObjectCfg(
+                                                        num_objects=120,
+                                                        height=2.0,
+                                                        size=(0.5, 0.5),
+                                                        max_yx_angle=0.0
+                                                    ),
+                            object_params_end= MeshRepeatedBoxesTerrainCfg.ObjectCfg(
+                                                        num_objects=120,
+                                                        height=2.0,
+                                                        size=(0.5, 0.5),
+                                                        max_yx_angle=0.0
+                                                    ),
+                            platform_width=1.0,
+                            platform_height=0.0,
+                            rel_height_noise=(1.0, 1.0)
                 ),
 
         }
@@ -238,7 +265,7 @@ class Go1NavTasksDepthNavEnvCfg_TRAIN(Go1NavTasksDepthNavEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-@configclass 
+@configclass
 class Go1NavTasksDepthNavEnvCfg_PLAY(Go1NavTasksDepthNavEnvCfg):
     def __post_init__(self):
         super().__post_init__()
@@ -270,7 +297,7 @@ class Go1NavTasksDepthNavEnvCfg_PLAY(Go1NavTasksDepthNavEnvCfg):
                                             enable_saved_paths_loading=False,
                                             terrain_analysis=TerrainAnalysisCfg(
                                                 raycaster_sensor="front_zed_camera",
-                                                sample_points = 20000, 
+                                                sample_points = 10000,
                                                 max_terrain_size=100.0,
                                                 semantic_cost_mapping=None,
                                                 viz_graph=True,
@@ -280,13 +307,160 @@ class Go1NavTasksDepthNavEnvCfg_PLAY(Go1NavTasksDepthNavEnvCfg):
                                         resampling_time_range=(1.0e9, 1.0e9),  # No resampling
                                         debug_vis=True,
                                     )
-        
+
         self.scene.num_envs = 8
 
 
-@configclass 
+@configclass
 class Go1NavTasksDepthNavEnvCfg_DEV(Go1NavTasksDepthNavEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
         self.scene.num_envs = 2
+
+
+@configclass
+class Go1NavTasksDepthNavEnvCfg_IL_COLLECT(Go1NavTasksDepthNavEnvCfg):
+    """Environment config for collecting demonstrations with trained RL policy.
+
+    Uses concatenated observations (same as training) but records them as dict
+    via the recorder for robomimic compatibility.
+    """
+    def __post_init__(self):
+        super().__post_init__()
+
+        # change to a fixed map
+        self.scene.terrain.terrain_generator = DIS_OBS_STATIC_TERRAINS_CFG
+        # fixed seed for deterministic map generation
+        self.seed = 42
+
+        self.commands.goal_command = mdp.GoalCommandCfg(
+                                        asset_name="robot",
+                                        z_offset_spawn=0.0,
+                                        num_pairs=1000,
+                                        path_length_range=[20, 30],
+                                        traj_sampling=TrajectorySamplingCfg(
+                                            enable_saved_paths_loading=False,
+                                            terrain_analysis=TerrainAnalysisCfg(
+                                                raycaster_sensor="front_zed_camera",
+                                                sample_points = 3000,
+                                                max_terrain_size= 100.0,
+                                                max_path_length=30.0,
+                                                semantic_cost_mapping=None,
+                                                viz_graph=False,
+                                                viz_height_map=False,
+                                            ),
+                                        ),
+                                        resampling_time_range=(5, 10),  # Do resampling
+                                        debug_vis=True,
+                                    )
+        
+        # success key is needed for export successful episodes
+        self.terminations.success = self.terminations.goal_reached
+
+        # Configure recorder for IL data collection
+        # Records observations as dict for robomimic compatibility
+        self.recorders = NavigationILRecorderManagerCfg(
+            dataset_export_dir_path="./datasets",
+            dataset_filename="go1_nav_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+            dataset_export_mode=DatasetExportMode.EXPORT_SUCCEEDED_ONLY,
+        )
+
+        # self.scene.num_envs = 64
+
+
+# =============================================================================
+# IL (Imitation Learning) Observation Configurations
+# =============================================================================
+
+@configclass
+class Go1ILNavigationPolicyCfg(ObsGroup):
+    """Navigation policy observations for IL training (non-concatenated dict format).
+
+    Same observations as NavigationPolicyCfg but returned as a dict instead of
+    a flat concatenated tensor. This is required for robomimic compatibility.
+    """
+
+    base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+    base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
+    joint_pos = ObsTerm(func=mdp.joint_pos_rel)
+    joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+    goal_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "goal_command"})
+    forwards_depth_image = mdp.EmbeddedDepthImageCfg(
+        sensor_cfg=SceneEntityCfg("front_zed_camera"),
+    )
+
+    def __post_init__(self):
+        self.enable_corruption = False
+        self.concatenate_terms = False  # Return as dict, not concatenated
+
+
+@configclass
+class Go1ILLocomotionPolicyCfg(ObsGroup):
+    """Locomotion policy observations for IL training (non-concatenated dict format).
+
+    Same observations as Go1LocomotionPolicyCfg but returned as a dict instead of
+    a flat concatenated tensor.
+    """
+
+    base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+    base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
+    projected_gravity = ObsTerm(func=mdp.projected_gravity)
+    velocity_commands = ObsTerm(func=mdp.vel_commands, params={"action_term": "velocity_command"})
+    joint_pos = ObsTerm(func=mdp.joint_pos_rel)
+    joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+    actions = ObsTerm(func=mdp.last_low_level_action, params={"action_term": "velocity_command"})
+
+    def __post_init__(self):
+        self.enable_corruption = False
+        self.concatenate_terms = True # low-level locomotion
+
+
+@configclass
+class Go1ILObservationsCfg(Go1ObservationsCfg):
+    """Observation config for IL training with dict-style (non-concatenated) observations."""
+
+    def __post_init__(self):
+        # do post init of base class first
+        super().__post_init__()
+
+        # Replace observation groups with non-concatenated versions
+        self.policy.concatenate_terms = False # do not concatenate when using IL policy
+
+
+@configclass
+class Go1NavTasksDepthNavEnvCfg_IL_PLAY(Go1NavTasksDepthNavEnvCfg_IL_COLLECT):
+    """Environment config for playing/validating IL policy.
+
+    Uses non-concatenated (dict-style) observations which are required by
+    robomimic policies. This allows the trained IL policy to receive observations
+    in the same format as during training.
+    """
+    def __post_init__(self):
+        super().__post_init__()
+
+        # Use dict-style observations for robomimic compatibility
+        self.observations = Go1ILObservationsCfg()
+
+        # Use at_goal function (not StayedAtGoal class) for compatibility with play.py
+        self.terminations.success = DoneTerm(
+            func=mdp.at_goal,
+            params={
+                "distance_threshold": 0.5,
+                "angle_threshold": 0.3,
+                "speed_threshold": 0.6,
+            },
+            time_out=False,
+        )
+
+        # disable recorder
+        self.recorders = None
+
+        # Disable curriculum
+        self.curriculum = None
+
+        self.viewer.eye = (0.0, 7.0, 7.0)
+        self.viewer.lookat = (0.0, 0.0, 0.0)
+
+        self.scene.num_envs = 1
+

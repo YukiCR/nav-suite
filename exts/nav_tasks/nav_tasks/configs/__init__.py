@@ -56,3 +56,22 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:PPOCfgDEV",
     },
 )
+
+
+gym.register(
+    id="NavTasks-DepthImgNavigation-Go1-IL-COLLECT",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_COLLECT,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:PPOCfg",
+    },
+)
+
+gym.register(
+    id="NavTasks-DepthImgNavigation-Go1-IL-PLAY",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_PLAY,
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+)
