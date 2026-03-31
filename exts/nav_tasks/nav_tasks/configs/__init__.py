@@ -57,6 +57,7 @@ gym.register(
     },
 )
 
+######### IL 
 
 gym.register(
     id="NavTasks-DepthImgNavigation-Go1-IL-COLLECT",
@@ -68,10 +69,29 @@ gym.register(
 )
 
 gym.register(
+    id="NavTasks-DepthImgNavigation-Go1-IL-COLLECT-DEV",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_COLLECT_DEV,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:PPOCfg",
+    },
+)
+
+gym.register(
     id="NavTasks-DepthImgNavigation-Go1-IL-PLAY",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_PLAY,
         "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+)
+
+# under test, not for main results, to verify that the training pipeline can run with a simplified observation space (without joint states)
+gym.register(
+    id="NavTasks-DepthImgNavigation-Go1-IL-PLAY-SIMPLE",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_PLAY,
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim_simple.json",
     },
 )

@@ -74,8 +74,8 @@ DIS_OBS_TERRAINS_CFG = TerrainGeneratorCfg(
 DIS_OBS_STATIC_TERRAINS_CFG = TerrainGeneratorCfg(
     size=(30.0, 30.0),
     border_width=0.0,
-    num_rows=1,
-    num_cols=1,
+    num_rows=2,
+    num_cols=2,
     horizontal_scale=0.1,
     vertical_scale=0.1,
     slope_threshold=0.75,
@@ -85,13 +85,13 @@ DIS_OBS_STATIC_TERRAINS_CFG = TerrainGeneratorCfg(
         "repeated_boxes": MeshRepeatedBoxesTerrainCfg(
                             proportion= 1.0,
                             object_params_start= MeshRepeatedBoxesTerrainCfg.ObjectCfg(
-                                                        num_objects=120,
+                                                        num_objects=150,
                                                         height=2.0,
                                                         size=(0.5, 0.5),
                                                         max_yx_angle=0.0
                                                     ),
                             object_params_end= MeshRepeatedBoxesTerrainCfg.ObjectCfg(
-                                                        num_objects=120,
+                                                        num_objects=150,
                                                         height=2.0,
                                                         size=(0.5, 0.5),
                                                         max_yx_angle=0.0
@@ -238,17 +238,60 @@ class Go1NavTasksDepthNavEnvCfg(NavTasksDepthNavEnvCfg):
 
         self.sim.render_interval = 20
 
-        self.commands.goal_command.z_offset_spawn = 0.0
+        self.commands.goal_command = mdp.GoalCommandCfg(
+                                        asset_name="robot",
+                                        z_offset_spawn=0.0,
+                                        num_pairs=1000,
+                                        path_length_range=[5, 20],
+                                        traj_sampling=TrajectorySamplingCfg(
+                                            enable_saved_paths_loading=False,
+                                            terrain_analysis=TerrainAnalysisCfg(
+                                                raycaster_sensor="front_zed_camera",
+                                                sample_points = 10000,
+                                                max_terrain_size=100.0,
+                                                max_path_length=20.0,
+                                                semantic_cost_mapping=None,
+                                                viz_graph=True,
+                                                viz_height_map=False,
+                                            ),
+                                        ),
+                                        resampling_time_range=(1.0e9, 1.0e9),  # No resampling
+                                        debug_vis=True,
+                                    )
+
+        self.rewards.episode_termination.weight = -400 # more penalization on collision
 
         self.curriculum.goal_distances = CurrTerm(
                     func=mdp.modify_goal_distance_in_steps,
                     params={
-                        "update_rate_steps": 100 * 48,
+                        "update_rate_steps": 50 * 48,
                         "min_path_length_range": (0.0, 2.0),
-                        "max_path_length_range": (5.0, 25.0),
-                        "step_range": (50 * 48, 2500 * 48),
+                        "max_path_length_range": (5.0, 20.0),
+                        "step_range": (50 * 48, 2000 * 48),
                     },
                 )
+
+        # Gradually increase episode termination penalty
+        # FIXME: the robot stops moving forward if the penalty is high, figure out the suitable range and schedule for the penalty
+        self.curriculum.episode_termination_ramp = CurrTerm(
+            func=mdp.change_reward_weight,
+            params={
+                "reward_name": "episode_termination",
+                "weight_range": (-400.0, -500.0),
+                "step_range": (500 * 48, 20000 * 48),
+                "mode": "linear",
+            },
+        )
+
+        # NOTE: not sure if this modification is correct
+        self.terminations.time_out = DoneTerm(
+                            func=mdp.proportional_time_out,
+                            params={
+                                "max_speed": 1.0,
+                                "safety_factor": 6.0,
+                            },
+                            time_out=True,  # No termination penalty for time_out = True
+                        )
         
         # update sensor update periods
         # We tick contact sensors based on the smallest update period (physics update period)
@@ -274,7 +317,7 @@ class Go1NavTasksDepthNavEnvCfg_PLAY(Go1NavTasksDepthNavEnvCfg):
         self.scene.num_envs = 10
 
         # Disable curriculum
-        self.curriculum = CurriculumCfg()
+        self.curriculum = None
 
         # Set fixed parameters for play mode
         self.events.reset_base.params["yaw_range"] = (0, 0)
@@ -318,6 +361,9 @@ class Go1NavTasksDepthNavEnvCfg_DEV(Go1NavTasksDepthNavEnvCfg):
 
         self.scene.num_envs = 2
 
+# =============================================================================
+# IL (Imitation Learning) Observation Configurations
+# =============================================================================
 
 @configclass
 class Go1NavTasksDepthNavEnvCfg_IL_COLLECT(Go1NavTasksDepthNavEnvCfg):
@@ -334,20 +380,23 @@ class Go1NavTasksDepthNavEnvCfg_IL_COLLECT(Go1NavTasksDepthNavEnvCfg):
         # fixed seed for deterministic map generation
         self.seed = 42
 
+        # Disable curriculum, else the path length will be impacted by the curriculum
+        self.curriculum = None
+
         self.commands.goal_command = mdp.GoalCommandCfg(
                                         asset_name="robot",
                                         z_offset_spawn=0.0,
                                         num_pairs=1000,
-                                        path_length_range=[20, 30],
+                                        path_length_range=[5, 8],
                                         traj_sampling=TrajectorySamplingCfg(
                                             enable_saved_paths_loading=False,
                                             terrain_analysis=TerrainAnalysisCfg(
                                                 raycaster_sensor="front_zed_camera",
-                                                sample_points = 3000,
-                                                max_terrain_size= 100.0,
-                                                max_path_length=30.0,
+                                                sample_points = 2000,
+                                                max_terrain_size= 50.0,
+                                                max_path_length= 20.0,
                                                 semantic_cost_mapping=None,
-                                                viz_graph=False,
+                                                viz_graph=True,
                                                 viz_height_map=False,
                                             ),
                                         ),
@@ -366,54 +415,15 @@ class Go1NavTasksDepthNavEnvCfg_IL_COLLECT(Go1NavTasksDepthNavEnvCfg):
             dataset_export_mode=DatasetExportMode.EXPORT_SUCCEEDED_ONLY,
         )
 
-        # self.scene.num_envs = 64
-
-
-# =============================================================================
-# IL (Imitation Learning) Observation Configurations
-# =============================================================================
-
 @configclass
-class Go1ILNavigationPolicyCfg(ObsGroup):
-    """Navigation policy observations for IL training (non-concatenated dict format).
-
-    Same observations as NavigationPolicyCfg but returned as a dict instead of
-    a flat concatenated tensor. This is required for robomimic compatibility.
+class Go1NavTasksDepthNavEnvCfg_IL_COLLECT_DEV(Go1NavTasksDepthNavEnvCfg_IL_COLLECT):
     """
-
-    base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-    base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
-    joint_pos = ObsTerm(func=mdp.joint_pos_rel)
-    joint_vel = ObsTerm(func=mdp.joint_vel_rel)
-    goal_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "goal_command"})
-    forwards_depth_image = mdp.EmbeddedDepthImageCfg(
-        sensor_cfg=SceneEntityCfg("front_zed_camera"),
-    )
-
-    def __post_init__(self):
-        self.enable_corruption = False
-        self.concatenate_terms = False  # Return as dict, not concatenated
-
-
-@configclass
-class Go1ILLocomotionPolicyCfg(ObsGroup):
-    """Locomotion policy observations for IL training (non-concatenated dict format).
-
-    Same observations as Go1LocomotionPolicyCfg but returned as a dict instead of
-    a flat concatenated tensor.
+    Go1NavTasksDepthNavEnvCfg_IL_COLLECT_DEV, only change num env to 1 for bugging
     """
-
-    base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-    base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
-    projected_gravity = ObsTerm(func=mdp.projected_gravity)
-    velocity_commands = ObsTerm(func=mdp.vel_commands, params={"action_term": "velocity_command"})
-    joint_pos = ObsTerm(func=mdp.joint_pos_rel)
-    joint_vel = ObsTerm(func=mdp.joint_vel_rel)
-    actions = ObsTerm(func=mdp.last_low_level_action, params={"action_term": "velocity_command"})
-
     def __post_init__(self):
-        self.enable_corruption = False
-        self.concatenate_terms = True # low-level locomotion
+        super().__post_init__()
+
+        self.scene.num_envs = 1
 
 
 @configclass
@@ -453,14 +463,31 @@ class Go1NavTasksDepthNavEnvCfg_IL_PLAY(Go1NavTasksDepthNavEnvCfg_IL_COLLECT):
             time_out=False,
         )
 
+        # self.commands.goal_command = mdp.GoalCommandCfg(
+        #                                 asset_name="robot",
+        #                                 z_offset_spawn=0.0,
+        #                                 num_pairs=1000,
+        #                                 path_length_range=[5, 10],
+        #                                 traj_sampling=TrajectorySamplingCfg(
+        #                                     enable_saved_paths_loading=False,
+        #                                     terrain_analysis=TerrainAnalysisCfg(
+        #                                         raycaster_sensor="front_zed_camera",
+        #                                         sample_points = 3000,
+        #                                         max_terrain_size= 100.0,
+        #                                         max_path_length=30.0,
+        #                                         semantic_cost_mapping=None,
+        #                                         viz_graph=False,
+        #                                         viz_height_map=False,
+        #                                     ),
+        #                                 ),
+        #                                 resampling_time_range=(5, 10),  # Do resampling
+        #                                 debug_vis=True,
+        #                             )
+
         # disable recorder
         self.recorders = None
 
-        # Disable curriculum
-        self.curriculum = None
-
-        self.viewer.eye = (0.0, 7.0, 7.0)
+        self.viewer.eye = (0.0, 0.0, 10.0)
         self.viewer.lookat = (0.0, 0.0, 0.0)
 
         self.scene.num_envs = 1
-
