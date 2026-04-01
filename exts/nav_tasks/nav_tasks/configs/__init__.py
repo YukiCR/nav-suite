@@ -86,7 +86,8 @@ gym.register(
     },
 )
 
-# under test, not for main results, to verify that the training pipeline can run with a simplified observation space (without joint states)
+# verify that the training pipeline can run with a simplified observation space (without joint states)
+# IL can learn the basic behaviors even without joint state info
 gym.register(
     id="NavTasks-DepthImgNavigation-Go1-IL-PLAY-SIMPLE",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
@@ -95,3 +96,22 @@ gym.register(
         "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim_simple.json",
     },
 )
+
+gym.register(
+    id="NavTasks-DepthImgNavigation-Go1-IL-KB-COLLECT",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_KB_COLLECT,
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+)
+
+gym.register(
+    id="NavTasks-DepthImgNavigation-Go1-IL-KB-PLAY",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": go1_env_cfg.Go1NavTasksDepthNavEnvCfg_IL_KB_PLAY,
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim_simple.json",
+    },
+)
+

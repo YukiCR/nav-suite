@@ -362,7 +362,7 @@ class Go1NavTasksDepthNavEnvCfg_DEV(Go1NavTasksDepthNavEnvCfg):
         self.scene.num_envs = 2
 
 # =============================================================================
-# IL (Imitation Learning) Observation Configurations
+# IL (Imitation Learning) Configurations
 # =============================================================================
 
 @configclass
@@ -491,3 +491,50 @@ class Go1NavTasksDepthNavEnvCfg_IL_PLAY(Go1NavTasksDepthNavEnvCfg_IL_COLLECT):
         self.viewer.lookat = (0.0, 0.0, 0.0)
 
         self.scene.num_envs = 1
+
+# =============================================================================
+# IL (Imitation Learning) Demonstration Configurations
+# The env for collecting demos by keyboard teleoperation
+# =============================================================================
+@configclass
+class Go1NavTasksDepthNavEnvCfg_IL_KB_COLLECT(Go1NavTasksDepthNavEnvCfg_IL_COLLECT):
+    def __post_init__(self):
+        super().__post_init__()
+
+        # easy intial heading direction for human teleoperation
+        self.events.reset_base.params["yaw_range"] = (0, 0)
+
+        # Use at_goal function (not StayedAtGoal class) for compatibility with record_demos.py
+        self.terminations.success = DoneTerm(
+            func=mdp.at_goal,
+            params={
+                "distance_threshold": 1.0,
+                "angle_threshold": 2.0,
+                "speed_threshold": 0.6,
+            },
+            time_out=False,
+        )
+
+        self.commands.goal_command.resampling_time_range = (1e9, 1e9)  # No resampling
+
+        # no time out, this is also disabled at line 229 of scripts/tools/record_demos.py
+        self.terminations.time_out = None 
+        
+        # set viewer as BEV for better teleoperation experience
+        self.viewer.eye = (0.0, 0.0, 10.0)
+        self.viewer.lookat = (0.0, 0.0, 0.0)
+
+        self.scene.num_envs = 1
+
+@configclass
+class Go1NavTasksDepthNavEnvCfg_IL_KB_PLAY(Go1NavTasksDepthNavEnvCfg_IL_KB_COLLECT):
+    def __post_init__(self):
+        super().__post_init__()
+
+        # disable recorder
+        self.recorders = None
+
+        # Use dict-style observations for robomimic compatibility
+        self.observations = Go1ILObservationsCfg()
+
+        self.seed = 42
